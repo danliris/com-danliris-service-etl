@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "echo \"No tests yet...\""
+    "test": "mocha tests/index.js"
   },
   "dependencies": {
     "moment": "^2.24.0",
@@ -11,5 +11,10 @@
     "sequelize": "^5.18.0",
     "tedious": "^6.3.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "mocha": "^6.2.0",
+    "nyc": "^14.1.1",
+    "should": "^13.2.3",
+    "sinon": "^7.4.2"
+  }
 }
