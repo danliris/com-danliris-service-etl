@@ -12,7 +12,7 @@ module.exports = async function (context, req) {
         .then((result) => {
             console.log('success');
             context.res = {
-                body: 'success'
+                body: JSON.stringify(result)
             };
         })
         .catch((e) => {
