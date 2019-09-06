@@ -13,7 +13,7 @@ module.exports = async function () {
 const extractFQC = async function () {
     var fabricQC = await sqlFPConnection
         .sqlFP
-        .query(`select top(1) id, code, pointSystem, dateIm, shiftIm, [group], operatorIm, MachineNoIm, 
+        .query(`select id, code, pointSystem, dateIm, shiftIm, [group], operatorIm, MachineNoIm, 
         ProductionOrderNo, productionOrderType, kanbanCode, cartNo, Buyer, orderQuantity, 
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols`, {
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
