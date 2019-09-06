@@ -30,8 +30,8 @@ const extractFQC = async function () {
         .query(`select id, code, pointSystem, dateIm, shiftIm, [group], operatorIm, MachineNoIm, 
         ProductionOrderNo, productionOrderType, kanbanCode, cartNo, Buyer, orderQuantity, 
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols`, {
-                type: sqlFPConnection.sqlFP.QueryTypes.SELECT
-            });
+            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+        });
 
     for (var element of fabricQC) {
         element.fabricGradeTests = await joinFGT(element);
@@ -127,9 +127,11 @@ const transform = function (data) {
     return Promise.resolve([].concat.apply([], result));
 }
 
-function insertQuery(sql, query) {
+function insertQuery(sql, query, transaction) {
     return new Promise((resolve, reject) => {
-        sql.query(query)
+        sql.query(query, {
+            transaction: transaction
+        })
             .then(([results, metadata]) => {
                 resolve(metadata);
             })
@@ -153,10 +155,10 @@ function load(data) {
                     if (item) {
                         var queryString = `\nSELECT ${item.qcCode}, ${item.qcpointSystem}, ${item.dateIm}, ${item.shiftIm}, ${item.group}, ${item.operatorIm}, ${item.machineNoIm}, ${item.productionOrderNo}, ${item.productionOrderType}, ${item.kanbanCode}, ${item.cartNo}, ${item.buyer}, ${item.orderQuantity}, ${item.color}, ${item.construction}, ${item.packingInstruction}, ${item.uom}, ${item.type}, ${item.pcsNo}, ${item.grade}, ${item.width}, ${item.initLength}, ${item.avalLength}, ${item.finalLength}, ${item.sampleLength}, ${item.fabricGradeTest}, ${item.finalGradeTest}, ${item.score}, ${item.finalScore}, ${item.pointSystem}, ${item.criteriaCode}, ${item.criteriaGroup}, ${item.criteriaName}, ${item.criteriaA}, ${item.criteriaB}, ${item.criteriaC}, ${item.criteriaD}, ${item.totalScore}, ${item.deleted}, ${item.isUsed}, ${item.pointLimit} UNION ALL `;
                         sqlQuery = sqlQuery.concat(queryString);
-                        
+
                         if (count % 1000 === 0) {
                             sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
-                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery));
+                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
                             sqlQuery = "INSERT INTO [DL_Fact_Fabric_Quality_Control_Temp] ";
                         }
                         console.log(`add data to query  : ${count}`);
@@ -166,12 +168,14 @@ function load(data) {
 
                 if (sqlQuery != "") {
                     sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
-                    command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`));
+                    command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
                 }
 
                 return Promise.all(command)
                     .then((results) => {
-                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL").then((execResult) => {
+                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL", {
+                            transaction: t
+                        }).then((execResult) => {
                             t.commit()
                                 .then(() => {
                                     resolve(results);

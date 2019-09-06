@@ -27,8 +27,8 @@ module.exports = async function (context, req) {
 
 function extract() {
     return sqlFPConnection
-    .sqlFP
-    .query(`select k.isdeleted, k.code, k.createdutc, k.ProductionOrderOrderNo, k.grade, k.cartcartnumber, k.CartQty, ki.Id InstructionId, 
+        .sqlFP
+        .query(`select k.isdeleted, k.code, k.createdutc, k.ProductionOrderOrderNo, k.grade, k.cartcartnumber, k.CartQty, ki.Id InstructionId, 
     ki.Code instructionCode, ki.name instructionname, ks.id stepid, ks.code stepcode, ks.process stepname, m.Code machineCode, m.Name machineName, m.MonthlyCapacity machineMonthlycapacity,
     ks.Deadline, k.CurrentStepIndex, ks.ProcessArea, k.IsComplete, k.ProductionOrderSalesContractNo, k.ProductionOrderProcessTypeName, k.ProductionOrderOrderTypeName, k.IsBadOutput, k.IsReprocess,
     k.OldKanbanId, k.Id, ks.stepindex
@@ -71,9 +71,11 @@ function transform(data) {
     return Promise.resolve(data);
 };
 
-function insertQuery(sql, query) {
+function insertQuery(sql, query, transaction) {
     return new Promise((resolve, reject) => {
-        sql.query(query)
+        sql.query(query, {
+            transaction: transaction
+        })
             .then(([results, metadata]) => {
                 resolve(metadata);
             })
@@ -99,7 +101,7 @@ function load(data) {
                         sqlQuery = sqlQuery.concat(queryString);
                         if (count % 1000 === 0) {
                             sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
-                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery));
+                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
                             sqlQuery = "INSERT INTO [DL_Fact_Kanban_Temp] ";
                         }
                         console.log(`add data to query  : ${count}`);
@@ -109,12 +111,14 @@ function load(data) {
 
                 if (sqlQuery != "") {
                     sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
-                    command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`));
+                    command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
                 }
 
                 return Promise.all(command)
                     .then((results) => {
-                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_KANBAN").then((execResult) => {
+                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_KANBAN", {
+                            transaction: t
+                        }).then((execResult) => {
                             t.commit()
                                 .then(() => {
                                     resolve(results);
