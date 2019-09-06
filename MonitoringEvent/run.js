@@ -69,10 +69,13 @@ const joinMachine = async function (data) {
         });
 
     var machine = machineList[0];
-    machine.unit = {};
-    machine.unit.code = machine.unitCode;
-    machine.unit.name = machine.unitName;
-    machine.unit.division = await joinDivision(machine);
+    if (machine) {
+        machine.unit = {};
+        machine.unit.code = machine.unitCode;
+        machine.unit.name = machine.unitName;
+        machine.unit.division = await joinDivision(machine);
+    }
+
     return machine;
 };
 
@@ -120,15 +123,18 @@ const joinProductionOrder = async function (data) {
         });
 
     var productionOrder = productionOrderList[0];
-    productionOrder.buyer = await joinBuyer(productionOrder);
-    productionOrder.material = {};
-    productionOrder.material.name = productionOrder.materialName;
-    productionOrder.orderType = {};
-    productionOrder.orderType.name = productionOrder.orderTypeName;
-    productionOrder.processType = {};
-    productionOrder.processType.name = productionOrder.processTypeName;
-    productionOrder.uom = {};
-    productionOrder.uom.unit = productionOrder.uomUnit;
+    if (productionOrder) {
+        productionOrder.buyer = await joinBuyer(productionOrder);
+        productionOrder.material = {};
+        productionOrder.material.name = productionOrder.materialName;
+        productionOrder.orderType = {};
+        productionOrder.orderType.name = productionOrder.orderTypeName;
+        productionOrder.processType = {};
+        productionOrder.processType.name = productionOrder.processTypeName;
+        productionOrder.uom = {};
+        productionOrder.uom.unit = productionOrder.uomUnit;
+    }
+
     return productionOrder;
 };
 
