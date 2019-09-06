@@ -31,7 +31,7 @@ const getOperationRange = function (hours) {
 const extractMonitoringEvent = async function () {
     var monitoringEvent = await sqlFPConnection
         .sqlFP
-        .query(`select top(1) cartNumber,
+        .query(`select cartNumber,
         code,
         dateStart,
         timeInMilisStart,
@@ -94,7 +94,7 @@ const joinDivision = async function (data) {
         .sqlCore
         .query(`select id, code, name from divisions where id = ?`, {
             replacements: [data.unitDivisionId],
-            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+            type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
 
 
@@ -128,7 +128,7 @@ const joinProductionOrder = async function (data) {
         salesContractNo
         FROM ProductionOrder where id = ?`, {
             replacements: [data.productionOrderId],
-            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+            type: sqlSalesConnection.sqlSales.QueryTypes.SELECT
         });
 
     var productionOrder = productionOrderList[0];
@@ -150,7 +150,7 @@ const joinBuyer = async function (data) {
         .sqlCore
         .query(`select address, code, contact, country, name, tempo from Buyers where id = ?`, {
             replacements: [data.buyerId],
-            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+            type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
 
 
