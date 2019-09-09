@@ -15,7 +15,7 @@ module.exports = async function () {
 const extractURN = async function () {
     var urns = await sqlPurchasingConnection
         .sqlPURCHASING
-        .query(`select top(1)
+        .query(`select
         id,
         urnNo,
         unitName
