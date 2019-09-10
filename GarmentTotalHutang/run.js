@@ -14,7 +14,7 @@ module.exports = async function () {
 const extractInternNote = function () {
     return sqlPurchasingConnection
         .sqlPURCHASING
-        .query(`select top(3)
+        .query(`select
         g.id,
         g.lastModifiedUtc,
         g.isDeleted,
