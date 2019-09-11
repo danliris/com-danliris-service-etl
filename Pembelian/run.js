@@ -1,6 +1,4 @@
 let sqlDWHConnections = require('../Connection/DWH/');
-let sqlFPConnection = require('../Connection/FinishingPrinting/');
-let sqlSalesConnection = require('../Connection/Sales/');
 let sqlCoreConnection = require('../Connection/Core/');
 let sqlPurchasingConnection = require('../Connection/Purchasing');
 const minimumDateString = "1753-01-01";

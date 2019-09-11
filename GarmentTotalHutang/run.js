@@ -123,7 +123,7 @@ const getCategory = async function (data) {
         from GarmentCategories
         where id = ?`, {
             replacements: [data.CategoryId],
-            type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
+            type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
 
     return categories[0];
@@ -140,7 +140,7 @@ const getDivision = async function (data) {
         from Units
         where id = ?`, {
             replacements: [data.UnitId],
-            type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
+            type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
     return division[0];
 }
