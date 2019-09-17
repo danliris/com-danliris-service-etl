@@ -34,7 +34,7 @@ module.exports = async function () {
             return await updateMigrationLog(updateLog);
         });
 
-}
+};
 
 async function timestamp() {
     return await sqlDWHConnections
@@ -61,7 +61,7 @@ async function updateMigrationLog(log) {
 }
 
 const extractPR = async function (times) {
-    var time = times.length > 0 ? times[0].start : "1970-01-01";
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
     var timestamp = new Date(time);
     return sqlFPConnection
         .sqlFP
