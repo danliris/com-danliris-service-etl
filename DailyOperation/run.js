@@ -103,7 +103,7 @@ const extractDailyOperation = async function (times) {
         k.ProductionOrderSalesContractNo salesContractNo,
         db.action 
         from DailyOperation d left join dailyoperationbadoutputreasons db on d.id = db.DailyOperationId left join Kanbans k on d.KanbanId = k.Id left join KanbanInstructions ki on k.Id = ki.KanbanId left join Machine m on d.MachineId = m.Id        
-        where d.lastmodifiedutc > ?
+        where d.lastmodifiedutc >= ?
         order by d.code, d.type`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
@@ -126,7 +126,7 @@ const extractDailyOperationBadOutputReason = async function (times) {
         db.id,
         db.dailyOperationId
         from DailyOperationBadOutputReasons db  inner join DailyOperation d  on d.Id = db.DailyOperationId
-        where d.lastmodifiedutc > ?
+        where d.lastmodifiedutc >= ?
         `, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
