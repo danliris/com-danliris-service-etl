@@ -1,12 +1,13 @@
 let sqlDWHConnections = require('../Connection/DWH/');
-let sqlDealConnections = require('../Connection/Deal/')
-const MIGRATION_LOG_DESCRIPTION = 'Fact Deal Tracking Activity from MongoDB to Azure DWH';
+let sqlDealConnections = require('../Connection/Deal/');
+let sqlCoreConnections = require('../Connection/Core/');
+const MIGRATION_LOG_DESCRIPTION = 'Fact Deal Tracking Board from MongoDB to Azure DWH';
 let moment = require('moment');
 
 module.exports = async function () {
     var startedDate = new Date();
     return await timestamp()
-        .then((times) => extract(times))
+        .then((times) => joinDealCurrencies(times))
         .then((data) => transform(data))
         .then((data) => load(data))
         .then(async (results) => {
@@ -60,27 +61,21 @@ async function updateMigrationLog(log) {
         });
 };
 
-const extract = async function (times) {
+const extractDealBoard = function (times) {
     var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
     var timestamp = new Date(time);
-    return await sqlDealConnections
+    return sqlDealConnections
         .sqlDeal
-        .query(`select
+        .query(`select 
         IsDeleted _deleted,
         id _id,
         code,
-        createdby _createdBy,
         createdutc _createdDate,
-        dealId,
-        type,
-        notes,
-        taskTitle,
-        dueDate,
-        status,
-        stagefromid sourceStageId,
-        stagetoid targetStageId,
-        assignedTo
-        from dealtrackingactivities
+        CreatedBy _createdBy,
+        title,
+        currencyCode,
+        currencySymbol
+        from DealTrackingBoards
         where lastmodifiedutc > ?
         `, {
             replacements: [timestamp],
@@ -89,23 +84,49 @@ const extract = async function (times) {
 
 };
 
+const extractCurrencies = function () {
+    return sqlCoreConnections
+        .sqlCore
+        .query(`select
+        code,
+        rate
+        from currencies`, {
+            type: sqlCoreConnections.sqlCore.QueryTypes.SELECT
+        });
+}
+
+const joinDealCurrencies = function (times) {
+    var dealBoard = extractDealBoard(times);
+    var currencies = extractCurrencies();
+
+    return Promise.all([dealBoard, currencies])
+        .then((data) => {
+            var dealBoard = data[0];
+            var currencies = data[1];
+
+            for (var element of dealBoard) {
+                var currency = currencies.find(x => x.code == element.currencyCode);
+                if (currency) {
+                    element.currencyRate = currency.rate;
+                }
+            }
+
+            return Promise.resolve(dealBoard);
+        });
+}
+
 function transform(data) {
     var result = data.map((item) => {
         return {
             deleted: `'${item._deleted}'`,
             id: `'${item._id.toString()}'`,
             code: item.code ? `'${item.code.replace(/'/g, '"')}'` : null,
-            createdDate: `'${moment(item._createdDate).add(7, "hours").format("YYYY-MM-DD HH:mm:ss")}'`,
+            createdDate: `'${moment(item._createdDate).add(7, "hours").format("YYYY-MM-DD")}'`,
             createdBy: `'${item._createdBy}'`,
-            dealId: item.dealId ? `'${item.dealId.toString()}'` : null,
-            type: item.type ? `'${item.type.replace(/'/g, '"')}'` : null,
-            notes: item.notes ? `'${item.notes.replace(/'/g, '"')}'` : null,
             title: item.title ? `'${item.title.replace(/'/g, '"')}'` : null,
-            dueDate: item.dueDate ? `'${moment(item.dueDate).add(7, "hours").format("YYYY-MM-DD")}'` : null,
-            status: item.status != undefined ? `'${item.status}'` : null,
-            sourceStageId: item.sourceStageId ? `'${item.sourceStageId.toString().replace(/'/g, '"')}'` : null,
-            targetStageId: item.targetStageId ? `'${item.targetStageId.toString().replace(/'/g, '"')}'` : null,
-            assignedTo: item.assignedTo ? `'${item.assignedTo.replace(/'/g, '"')}'` : null
+            currencyCode: item.currencyCode ? `'${item.currencyCode.replace(/'/g, '"')}'` : null,
+            currencyRate: item.currencyRate ? `'${item.currencyRate}'` : null,
+            currencySymbol: item.currencySymbol ? `'${item.currencySymbol.replace(/'/g, '"')}'` : null
         };
     });
     return Promise.resolve([].concat.apply([], result));
@@ -132,12 +153,12 @@ function load(data) {
             .transaction()
             .then(t => {
                 var command = [];
-                var sqlQuery = 'INSERT INTO [DL_Fact_Deal_Tracking_Activity_Temp](deleted, id, code, createdDate, createdBy, dealId, type, notes, title, dueDate, status, sourceStageId, targetStageId, assignedTo) ';
+                var sqlQuery = 'INSERT INTO [DL_Fact_Deal_Tracking_Board_Temp](deleted, id, code, createdDate, createdBy, title, currencyCode, currencyRate, currencySymbol) ';
 
                 var count = 1;
                 for (var item of data) {
                     if (item) {
-                        var values = `${item.deleted}, ${item.id}, ${item.code}, ${item.createdDate}, ${item.createdBy}, ${item.dealId}, ${item.type}, ${item.notes}, ${item.title}, ${item.dueDate}, ${item.status}, ${item.sourceStageId}, ${item.targetStageId}, ${item.assignedTo}`;
+                        var values = `${item.deleted}, ${item.id}, ${item.code}, ${item.createdDate}, ${item.createdBy}, ${item.title}, ${item.currencyCode}, ${item.currencyRate}, ${item.currencySymbol}`;
                         var queryString = `\nSELECT ${values} UNION ALL `;
 
                         sqlQuery = sqlQuery.concat(queryString);
@@ -145,7 +166,7 @@ function load(data) {
                         if (count % 4000 == 0) {
                             sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                             command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
-                            sqlQuery = "INSERT INTO [DL_Fact_Deal_Tracking_Activity_Temp](deleted, id, code, createdDate, createdBy, dealId, type, notes, title, dueDate, status, sourceStageId, targetStageId, assignedTo) ";
+                            sqlQuery = "INSERT INTO [DL_Fact_Deal_Tracking_Board_Temp](deleted, id, code, createdDate, createdBy, title, currencyCode, currencyRate, currencySymbol) ";
                         }
                         console.log(`add data to query  : ${count}`);
                         count++;
@@ -161,7 +182,7 @@ function load(data) {
 
                 return Promise.all(command)
                     .then((results) => {
-                        sqlDWHConnections.sqlDWH.query("exec [DL_Upsert_Fact_Deal_Tracking_Activity]", {
+                        sqlDWHConnections.sqlDWH.query("exec [DL_Upsert_Fact_Deal_Tracking_Board]", {
                             transaction: t
                         }).then((execResult) => {
                             t.commit()
