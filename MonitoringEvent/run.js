@@ -2,21 +2,73 @@ let sqlDWHConnections = require('../Connection/DWH/');
 let sqlFPConnection = require('../Connection/FinishingPrinting/')
 let sqlCoreConnection = require('../Connection/Core/')
 let sqlSalesConnection = require('../Connection/Sales/')
-
+const MIGRATION_LOG_DESCRIPTION = "Fact Monitoring Event from MongoDB to Azure DWH";
 let moment = require('moment');
 
 module.exports = async function () {
-    return await extractMonitoringEvent()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => extractMonitoringEvent(times))
         .then((data) => transform(data))
         .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 
 }
+
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
+};
 
 const getOperationRange = function (hours) {
     return hours / 60;
 }
 
-const extractMonitoringEvent = async function () {
+const extractMonitoringEvent = async function (times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     var monitoringEvent = await sqlFPConnection
         .sqlFP
         .query(`select cartNumber,
@@ -35,7 +87,9 @@ const extractMonitoringEvent = async function () {
         createdBy,
         isDeleted,
         machineEventCategory
-        from monitoringevent`, {
+        from monitoringevent
+        where lastmodifiedutc >= :tanggal and CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], tanggal: timestamp },
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
 

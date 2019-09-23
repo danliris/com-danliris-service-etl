@@ -2,24 +2,78 @@ let sqlDWHConnections = require('../Connection/DWH/');
 let sqlFPConnection = require('../Connection/FinishingPrinting/');
 let sqlSalesConnection = require('../Connection/Sales/');
 let sqlPurchasingConnection = require('../Connection/Purchasing');
-
+const MIGRATION_LOG_DESCRIPTION = "Fact Total Hutang from MongoDB to Azure DWH";
 let moment = require('moment');
 
 module.exports = async function () {
-    return await extractURN()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => extractURN(times))
         .then((data) => transform(data))
-        .then((data) => load(data));
+        .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 
 }
 
-const extractURN = async function () {
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
+};
+
+const extractURN = async function (times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     var urns = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
         id,
         urnNo,
         unitName
-         from unitreceiptnotes`, {
+         from unitreceiptnotes
+         where lastmodifiedutc > :tanggal and isdeleted = 0 and createdby not in(:creator) `, {
+            replacements: { creator: ['dev', 'unit-test'], tanggal: timestamp },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 

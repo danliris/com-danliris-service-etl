@@ -1,15 +1,66 @@
 let sqlDWHConnections = require('../Connection/DWH/');
 let sqlCoreConnection = require('../Connection/Core/');
 let sqlPurchasingConnection = require('../Connection/Purchasing');
+const MIGRATION_LOG_DESCRIPTION = "Fact Pembelian from MongoDB to Azure DWH";
 const minimumDateString = "1753-01-01";
 let moment = require('moment');
 
 module.exports = async function () {
-    return await joinPembelianCurrency()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => joinPembelianCurrency(times))
         .then((data) => transform(data))
-        .then((data) => load(data));
+        .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 
 }
+
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
+};
 
 const getRangeMonth = function (days) {
     if (days <= 30) {
@@ -66,7 +117,9 @@ const validateDate = function (date) {
     return dateToValidate;
 }
 
-const extractPembelian = function () {
+const extractPembelian = function (times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     return sqlPurchasingConnection
         .sqlPURCHASING
         .query(`SELECT
@@ -109,7 +162,9 @@ const extractPembelian = function () {
         urn.receiptDate,
         upo.UPONo interNoteNo,
         upo.Date interNoteDate
-        FROM purchaserequests pr left join InternalPurchaseOrders ipo on pr.Id = ipo.PRId left join  ExternalPurchaseOrderItems ei on ipo.Id = ei.poId left join ExternalPurchaseOrderDetails ed on ei.Id = ed.EPOItemId left join ExternalPurchaseOrders e on ei.EPOId = e.Id left join DeliveryOrderItems doi on e.Id = doi.EPOId left join DeliveryOrders d on doi.DOId = d.Id left join UnitReceiptNotes urn on d.Id = urn.doId left join UnitPaymentOrderItems upoi on urn.id = upoi.URNId left join UnitPaymentOrders upo on upoi.UPOId = upo.Id`, {
+        FROM purchaserequests pr left join InternalPurchaseOrders ipo on pr.Id = ipo.PRId left join  ExternalPurchaseOrderItems ei on ipo.Id = ei.poId left join ExternalPurchaseOrderDetails ed on ei.Id = ed.EPOItemId left join ExternalPurchaseOrders e on ei.EPOId = e.Id left join DeliveryOrderItems doi on e.Id = doi.EPOId left join DeliveryOrders d on doi.DOId = d.Id left join UnitReceiptNotes urn on d.Id = urn.doId left join UnitPaymentOrderItems upoi on urn.id = upoi.URNId left join UnitPaymentOrders upo on upoi.UPOId = upo.Id
+        where pr.lastmodifiedutc > :tanggal and pr.createdby not in (:creator) and ipo.IsDeleted = 0 and ei.IsDeleted = 0 and ipo.createdby not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], tanggal: timestamp },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 };
@@ -125,8 +180,8 @@ const getCurrency = function () {
         });
 }
 
-const joinPembelianCurrency = function () {
-    var pembelian = extractPembelian();
+const joinPembelianCurrency = function (times) {
+    var pembelian = extractPembelian(times);
     var currencies = getCurrency();
     return Promise.all([pembelian, currencies])
         .then((data) => {

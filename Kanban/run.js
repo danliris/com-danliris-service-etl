@@ -1,23 +1,77 @@
 let sqlDWHConnections = require('../Connection/DWH/');
 let sqlFPConnection = require('../Connection/FinishingPrinting/')
-
+const MIGRATION_LOG_DESCRIPTION = "Fact Kanban from MongoDB to Azure DWH";
 let moment = require('moment');
 
 module.exports = async function () {
-    return await extract()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => extract(times))
         .then((data) => transform(data))
         .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 
 }
 
-function extract() {
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
+};
+
+function extract(times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     return sqlFPConnection
         .sqlFP
         .query(`select k.isdeleted, k.code, k.createdutc, k.ProductionOrderOrderNo, k.grade, k.cartcartnumber, k.CartQty, ki.Id InstructionId, 
     ki.Code instructionCode, ki.name instructionname, ks.id stepid, ks.code stepcode, ks.process stepname, m.Code machineCode, m.Name machineName, m.MonthlyCapacity machineMonthlycapacity,
     ks.Deadline, k.CurrentStepIndex, ks.ProcessArea, k.IsComplete, k.ProductionOrderSalesContractNo, k.ProductionOrderProcessTypeName, k.ProductionOrderOrderTypeName, k.IsBadOutput, k.IsReprocess,
     k.OldKanbanId, k.Id, ks.stepindex
-    from kanbans k left join kanbaninstructions ki on k.id = ki.kanbanid left join kanbansteps ks on ki.id = ks.instructionid left join machine m on ks.machineid = m.id where k.code = '084ZM6N5'`, {
+    from kanbans k left join kanbaninstructions ki on k.id = ki.kanbanid left join kanbansteps ks on ki.id = ks.instructionid left join machine m on ks.machineid = m.id where k.code = '084ZM6N5'
+    where k.lastmodifiedutc >= :tanggal`, {
+            replacements: { tanggal: timestamp },
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
 }

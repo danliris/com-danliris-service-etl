@@ -1,17 +1,45 @@
 let sqlDWHConnections = require('../Connection/DWH/');
-
+const MIGRATION_LOG_DESCRIPTION = "Fact Total Hutang Garment from MongoDB to Azure DWH";
 let sqlPurchasingConnection = require('../Connection/Purchasing')
 let sqlCoreConnection = require('../Connection/Core/');
 let moment = require('moment');
 
 
 module.exports = async function () {
-    return await joinInternNoteCurrency()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => joinInternNoteCurrency(times))
         .then((data) => transform(data))
-        .then((data) => load(data));
+        .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 }
 
-const extractInternNote = function () {
+const extractInternNote = function (times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     return sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -28,10 +56,36 @@ const extractInternNote = function () {
         g.supplierName,
         gid.pricePerDealUnit,
         gid.quantity
-        from garmentinternnotes g left join GarmentInternNoteItems gi on g.Id = gi.GarmentINId left join GarmentInternNoteDetails gid on gi.Id = gid.GarmentItemINId`, {
+        from garmentinternnotes g left join GarmentInternNoteItems gi on g.Id = gi.GarmentINId left join GarmentInternNoteDetails gid on gi.Id = gid.GarmentItemINId
+        where g.lastmodifiedutc >= :tanggal`, {
+            replacements: { tanggal: timestamp },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 
+};
+
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
 };
 
 const extractGarmentCurrencies = function () {
@@ -49,8 +103,8 @@ const extractGarmentCurrencies = function () {
         });
 }
 
-const joinInternNoteCurrency = function () {
-    var interNotes = extractInternNote();
+const joinInternNoteCurrency = function (times) {
+    var interNotes = extractInternNote(times);
     var currencies = extractGarmentCurrencies();
 
     return Promise.all([interNotes, currencies])
@@ -94,7 +148,7 @@ const joinPurchaseRequest = async function (data) {
         g.UnitId,
         g.UnitName
         from GarmentPurchaseRequests g left join GarmentPurchaseRequestItems gi on g.Id = gi.GarmentPRId
-        where g.RONo = ?`, {
+        where g.RONo = ? and g.isdeleted = 0`, {
             replacements: [data.roNo],
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });

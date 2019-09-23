@@ -1,18 +1,71 @@
 let sqlDWHConnections = require('../Connection/DWH/');
 let sqlCoreConnection = require('../Connection/Core/');
 let sqlPurchasingConnection = require('../Connection/Purchasing');
+const MIGRATION_LOG_DESCRIPTION = "Fact Pembelian Garment from MongoDB to Azure DWH";
 const minimumDateString = "1753-01-01";
 let moment = require('moment');
 
 module.exports = async function () {
-    return await getGarmentPurchaseRequests()
+    var startedDate = new Date();
+    return await timestamp()
+        .then((times) => getGarmentPurchaseRequests(times))
         .then((data) => joinPurchaseOrder(data))
         .then((data) => transform(data))
-        .then((data) => load(data));
+        .then((data) => load(data))
+        .then(async (results) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: "Successful"
+            };
+            return await updateMigrationLog(updateLog);
+        })
+        .catch(async (err) => {
+            var finishedDate = new Date();
+            var spentTime = moment(finishedDate).diff(moment(startedDate), "minutes");
+            var updateLog = {
+                description: MIGRATION_LOG_DESCRIPTION,
+                start: startedDate,
+                finish: finishedDate,
+                executionTime: spentTime + " minutes",
+                status: err
+            };
+            return await updateMigrationLog(updateLog);
+        });
 
 }
 
-const garmentPR = function () {
+async function timestamp() {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`select top(1) * from [migration-log]
+        where description = ? and status = 'Successful' 
+        order by finish desc`, {
+            replacements: [MIGRATION_LOG_DESCRIPTION],
+            type: sqlDWHConnections.sqlDWH.QueryTypes.SELECT
+        });
+}
+
+async function updateMigrationLog(log) {
+    return await sqlDWHConnections
+        .sqlDWH
+        .query(`insert into [dbo].[migration-log](description, start, finish, executionTime, status)
+        values('${log.description}', '${moment(log.start).format("YYYY-MM-DD HH:mm:ss")}', '${moment(log.finish).format("YYYY-MM-DD HH:mm:ss")}', '${log.executionTime}', '${log.status}')`)
+        .then(([results, metadata]) => {
+            return metadata;
+        })
+        .catch((e) => {
+            return e;
+        });
+};
+
+const garmentPR = function (times) {
+    var time = times.length > 0 ? moment(times[0].start).format("YYYY-MM-DD") : "1970-01-01";
+    var timestamp = new Date(time);
     return sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select 
@@ -33,7 +86,9 @@ const garmentPR = function () {
         IsPosted,
         IsUsed,
         Id
-        from garmentpurchaserequests`, {
+        from garmentpurchaserequests
+        where lastmodifiedutc >= :tanggal and CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], tanggal: timestamp },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 };
@@ -95,8 +150,8 @@ const getCurrencies = function () {
         });
 };
 
-const getGarmentPurchaseRequests = function () {
-    var pr = garmentPR();
+const getGarmentPurchaseRequests = function (times) {
+    var pr = garmentPR(times);
     var div = division();
     var categories = garmentCategories();
     return Promise.all([pr, div, categories])
@@ -263,8 +318,8 @@ const getPOInternal = function (data) {
         IsClosed,
         Id
         from GarmentInternalPurchaseOrders
-        where prid = ?`, {
-            replacements: [data.Id],
+        where prid = :dataId and CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], dataId: data.Id },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 }
@@ -382,8 +437,8 @@ const getPOExternal = async function (poInternal) {
         e.IsIncomeTax,
         ei.Id
         from GarmentExternalPurchaseOrderItems ei left join GarmentExternalPurchaseOrders e on ei.GarmentEPOId = e.Id        
-        where ei.POId = ?`, {
-            replacements: [poInternal.GPOId],
+        where ei.POId = :poid and ei.CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], poid: poInternal.GPOId },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
     var poExternal = poExternals[0];
