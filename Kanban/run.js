@@ -69,7 +69,7 @@ function extract(times) {
     ki.Code instructionCode, ki.name instructionname, ks.id stepid, ks.code stepcode, ks.process stepname, m.Code machineCode, m.Name machineName, m.MonthlyCapacity machineMonthlycapacity,
     ks.Deadline, k.CurrentStepIndex, ks.ProcessArea, k.IsComplete, k.ProductionOrderSalesContractNo, k.ProductionOrderProcessTypeName, k.ProductionOrderOrderTypeName, k.IsBadOutput, k.IsReprocess,
     k.OldKanbanId, k.Id, ks.stepindex
-    from kanbans k left join kanbaninstructions ki on k.id = ki.kanbanid left join kanbansteps ks on ki.id = ks.instructionid left join machine m on ks.machineid = m.id where k.code = '084ZM6N5'
+    from kanbans k left join kanbaninstructions ki on k.id = ki.kanbanid left join kanbansteps ks on ki.id = ks.instructionid left join machine m on ks.machineid = m.id
     where k.lastmodifiedutc >= :tanggal`, {
             replacements: { tanggal: timestamp },
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
