@@ -1,14 +1,15 @@
-let sqlConnections = require('./src');
+let sqlDWHConnections = require('../Connection/DWH/');
+let sqlFPConnection = require('../Connection/FinishingPrinting/')
 
 let moment = require('moment');
 
-module.exports = async function (context, req) {
+module.exports = async function (context, req) {    
     context.log('JavaScript HTTP trigger function processed a request.');
 
-    await sqlConnections
-        .sqlDWH
-        .query(`SELECT 'A' AS Name`, {
-            type: sqlConnections.sqlDWH.QueryTypes.SELECT
+    await sqlFPConnection
+        .sqlFP
+        .query(`SELECT Top(1) * From Kanbans`, {
+            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         })
         .then((result) => {
             context.res = {
