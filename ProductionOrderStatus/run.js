@@ -66,7 +66,7 @@ const extractFPSalesContract = async function (times) {
     var timestamp = new Date(time);
     var fpSalesContracts = await sqlSalesConnection
         .sqlSales
-        .query(`SELECT
+        .query(`SELECT 
         createdUtc,
         salesContractNo,
         uomUnit,
@@ -130,7 +130,7 @@ const joinKanban = async function (data) {
         var kanbanList = await sqlFPConnection
             .sqlFP
             .query(`SELECT
-        id 
+        id, 
         createdUtc,
         code,
         productionOrderSalesContractNo,
