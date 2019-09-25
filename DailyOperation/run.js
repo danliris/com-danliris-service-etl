@@ -19,7 +19,7 @@ module.exports = async function () {
                 executionTime: spentTime + " minutes",
                 status: "Successful"
             };
-            return results
+            return await updateMigrationLog(updateLog);
         })
         .catch(async (err) => {
             var finishedDate = new Date();
@@ -269,30 +269,30 @@ function load(data) {
                     command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
                 }
 
-                // if (data.badOutputReasons && data.badOutputReasons.length > 0) {
-                //     var sqlQueryReason = 'INSERT INTO [DL_Fact_Daily_Operation_Reason_Temp](dailyOperationCode, badOutputReasonCode, reason, length, description, action) ';
+                if (data.badOutputReasons && data.badOutputReasons.length > 0) {
+                    var sqlQueryReason = 'INSERT INTO [DL_Fact_Daily_Operation_Reason_Temp](dailyOperationCode, badOutputReasonCode, reason, length, description, action) ';
 
-                //     var countReason = 1;
+                    var countReason = 1;
 
-                //     for (var item of data.badOutputReasons) {
-                //         if (item) {
-                //             var queryString = `\nSELECT ${item.dailyOperationCode}, ${item.badOutputReasonCode}, ${item.reason}, ${item.length}, ${item.description}, ${item.action} UNION ALL `;
-                //             sqlQueryReason = sqlQueryReason.concat(queryString);
-                //             if (countReason % 1000 === 0) {
-                //                 sqlQueryReason = sqlQueryReason.substring(0, sqlQueryReason.length - 10);
-                //                 command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQueryReason, t));
-                //                 sqlQueryReason = "INSERT INTO [DL_Fact_Daily_Operation_Reason_Temp](dailyOperationCode, badOutputReasonCode, reason, length, description, action) ";
-                //             }
-                //             console.log(`add data to query  : ${countReason}`);
-                //             countReason++;
-                //         }
-                //     }
+                    for (var item of data.badOutputReasons) {
+                        if (item) {
+                            var queryString = `\nSELECT ${item.dailyOperationCode}, ${item.badOutputReasonCode}, ${item.reason}, ${item.length}, ${item.description}, ${item.action} UNION ALL `;
+                            sqlQueryReason = sqlQueryReason.concat(queryString);
+                            if (countReason % 1000 === 0) {
+                                sqlQueryReason = sqlQueryReason.substring(0, sqlQueryReason.length - 10);
+                                command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQueryReason, t));
+                                sqlQueryReason = "INSERT INTO [DL_Fact_Daily_Operation_Reason_Temp](dailyOperationCode, badOutputReasonCode, reason, length, description, action) ";
+                            }
+                            console.log(`add data to query  : ${countReason}`);
+                            countReason++;
+                        }
+                    }
 
-                //     if (sqlQueryReason != "") {
-                //         sqlQueryReason = sqlQueryReason.substring(0, sqlQueryReason.length - 10);
-                //         command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQueryReason}`, t));
-                //     }
-                // }
+                    if (sqlQueryReason != "") {
+                        sqlQueryReason = sqlQueryReason.substring(0, sqlQueryReason.length - 10);
+                        command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQueryReason}`, t));
+                    }
+                }
 
 
                 return Promise.all(command)
