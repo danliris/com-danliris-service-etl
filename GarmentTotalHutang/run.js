@@ -106,11 +106,17 @@ const extractGarmentCurrencies = function () {
 const joinInternNoteCurrency = function (times) {
     var interNotes = extractInternNote(times);
     var currencies = extractGarmentCurrencies();
+    var purchaseRequests = joinPurchaseRequest();
+    var category = getCategory();
+    var division = getDivision();
 
-    return Promise.all([interNotes, currencies])
+    return Promise.all([interNotes, currencies, purchaseRequests, category, division])
         .then(async (data) => {
             var interNotes = data[0];
             var currencies = data[1];
+            var purchaseRequests = data[2];
+            var category = data[3];
+            var division = data[4];
             var results = [];
             for (var item of interNotes) {
                 var currency = currencies.filter(x => x.code == item.currencyCode &&
@@ -125,9 +131,14 @@ const joinInternNoteCurrency = function (times) {
                 } else {
                     result.currency = null;
                 }
-                var purchaseRequest = await joinPurchaseRequest(item);
-                if (purchaseRequest)
+                var purchaseRequest = purchaseRequests.find(x => x.rono == data.roNo);
+                if (purchaseRequest) {
+
                     result.purchaseRequest = purchaseRequest;
+                    result.purchaseRequest.categoryCode = category.find(x => x.id == purchaseRequest.CategoryId) ? category.find(x => x.id == purchaseRequest.CategoryId).code : null;
+                    result.purchaseRequest.divisionId = division.find(x => x.id == purchaseRequest.UnitId) ? division.find(x => x.id == purchaseRequest.UnitId).divisionId : null;
+                    result.purchaseRequest.divisionName = division.find(x => x.id == purchaseRequest.UnitId) ? division.find(x => x.id == purchaseRequest.UnitId).divisionName : null;
+                }
                 else
                     result.purchaseRequest = null;
                 results.push(result);
@@ -136,8 +147,8 @@ const joinInternNoteCurrency = function (times) {
         });
 }
 
-const joinPurchaseRequest = async function (data) {
-    var garmentPRs = await sqlPurchasingConnection
+const joinPurchaseRequest = function () {
+    var garmentPRs = sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
         g.Id,
@@ -148,43 +159,30 @@ const joinPurchaseRequest = async function (data) {
         g.UnitId,
         g.UnitName
         from GarmentPurchaseRequests g left join GarmentPurchaseRequestItems gi on g.Id = gi.GarmentPRId
-        where g.RONo = ? and g.isdeleted = 0`, {
-            replacements: [data.roNo],
+        where g.isdeleted = 0`, {
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 
-    var garmentPR = garmentPRs[0];
-    if (garmentPR) {
-        var category = await getCategory(garmentPR);
-        if (category) {
-            garmentPR.categoryCode = category.code;
-        }
-        var division = await getDivision(garmentPR);
-        if (division) {
-            garmentPR.divisionId = division.divisionId;
-            garmentPR.divisionName = division.divisionName;
-        }
-    }
-    return garmentPR;
+
+    return garmentPRs;
 }
 
-const getCategory = async function (data) {
-    var categories = await sqlCoreConnection
+const getCategory = function () {
+    var categories = sqlCoreConnection
         .sqlCore
         .query(`select 
         id,
         code
         from GarmentCategories
-        where id = ?`, {
-            replacements: [data.CategoryId],
+        `, {
             type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
 
-    return categories[0];
+    return categories;
 }
 
-const getDivision = async function (data) {
-    var division = await sqlCoreConnection
+const getDivision = function () {
+    var division = sqlCoreConnection
         .sqlCore
         .query(`select
         id,
@@ -192,11 +190,10 @@ const getDivision = async function (data) {
         divisionId,
         divisionName
         from Units
-        where id = ?`, {
-            replacements: [data.UnitId],
+        `, {
             type: sqlCoreConnection.sqlCore.QueryTypes.SELECT
         });
-    return division[0];
+    return division;
 }
 
 function getCategoryType(categoryCode) {

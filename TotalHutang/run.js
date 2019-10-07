@@ -156,13 +156,13 @@ const transform = function (data) {
             var results = unitReceiptNote.items.map((unitReceiptNoteItem) => {
 
                 return {
-                    unitPaymentOrderNo: `'${unitPaymentOrder.upoNo}'`,
-                    unitPaymentOrderDate: `'${moment(unitPaymentOrder.date).add(7, "hours").format("YYYY-MM-DD")}'`,
-                    unitPaymentOrderDueDate: `'${moment(unitPaymentOrder.dueDate).add(7, "hours").format("YYYY-MM-DD")}'`,
-                    supplierName: `'${unitPaymentOrder.supplier.name.replace(/'/g, '"')}'`,
-                    categoryName: `'${unitPaymentOrder.category.name}'`,
-                    categoryType: `'${unitPaymentOrder.category.name.toLowerCase() === "bahan baku" ? "BAHAN BAKU" : "NON BAHAN BAKU"}'`,
-                    divisionName: `'${unitPaymentOrder.division.name}'`,
+                    unitPaymentOrderNo: unitPaymentOrder ? `'${unitPaymentOrder.upoNo}'` : null,
+                    unitPaymentOrderDate: unitPaymentOrder ? `'${moment(unitPaymentOrder.date).add(7, "hours").format("YYYY-MM-DD")}'` : null,
+                    unitPaymentOrderDueDate: unitPaymentOrder ? `'${moment(unitPaymentOrder.dueDate).add(7, "hours").format("YYYY-MM-DD")}'` : null,
+                    supplierName: unitPaymentOrder ? `'${unitPaymentOrder.supplier.name.replace(/'/g, '"')}'` : null,
+                    categoryName: unitPaymentOrder ? `'${unitPaymentOrder.category.name}'` : null,
+                    categoryType: unitPaymentOrder ? `'${unitPaymentOrder.category.name.toLowerCase() === "bahan baku" ? "BAHAN BAKU" : "NON BAHAN BAKU"}'` : null,
+                    divisionName: unitPaymentOrder ? `'${unitPaymentOrder.division.name}'` : null,
                     unitName: `'${unitReceiptNote.unit.name}'`,
                     invoicePrice: `${unitReceiptNoteItem.pricePerDealUnit}`,
                     unitReceiptNoteQuantity: `${unitReceiptNoteItem.deliveredQuantity}`,

@@ -233,9 +233,9 @@ const joinFabricGradeTest = async function (data) {
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
 
-    var fabricGT = fabricGradeTestList[0];
+    // var fabricGT = fabricGradeTestList[0];
 
-    return fabricGT;
+    return fabricGradeTestList;
 };
 
 const orderQuantityConvertion = function (uom, quantity) {

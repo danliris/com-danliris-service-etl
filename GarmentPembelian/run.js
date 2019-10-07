@@ -23,6 +23,7 @@ module.exports = async function () {
                 status: "Successful"
             };
             return await updateMigrationLog(updateLog);
+            // return updateLog;
         })
         .catch(async (err) => {
             var finishedDate = new Date();
@@ -87,7 +88,8 @@ const garmentPR = function (times) {
         IsUsed,
         Id
         from garmentpurchaserequests
-        where lastmodifiedutc >= :tanggal and CreatedBy not in (:creator)`, {
+        where lastmodifiedutc >= :tanggal and CreatedBy not in (:creator)
+        `, {
             replacements: { creator: ['dev', 'unit-test'], tanggal: timestamp },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
@@ -221,8 +223,9 @@ const getGarmentPurchaseRequests = function (times) {
 
 const joinPurchaseOrder = async function (purchaseRequests) {
     let result = [];
+    let allFilteredPuchaseOrders = await getPurchaseOrder(purchaseRequests);
     for (var purchaseRequest of purchaseRequests) {
-        let filteredPurchaseOrders = await getPurchaseOrder(purchaseRequest);
+        let filteredPurchaseOrders = allFilteredPuchaseOrders.filter(x => x.PRId == purchaseRequest.Id);
         let dataToPush = {};
         if (filteredPurchaseOrders.length > 0) {
             for (let purchaseOrder of filteredPurchaseOrders) {
@@ -245,8 +248,8 @@ const joinPurchaseOrder = async function (purchaseRequests) {
     return result;
 }
 
-const getPurchaseOrder = function (purchaseRequest) {
-    var poInternal = getPOInternal(purchaseRequest);
+const getPurchaseOrder = function (purchaseRequests) {
+    var poInternal = getPOInternal(purchaseRequests);
     var div = division();
     var currencies = getCurrencies();
     var categories = garmentCategories();
@@ -257,6 +260,7 @@ const getPurchaseOrder = function (purchaseRequest) {
             var currencies = data[2];
             var categories = data[3];
             var results = [];
+            var allPoItems = await getPOInternalItems(poInternal, currencies, categories);
             for (var item of poInternal) {
                 var result = {};
                 result._createdBy = item.CreatedBy;
@@ -273,6 +277,7 @@ const getPurchaseOrder = function (purchaseRequest) {
                 result.unit.code = item.UnitCode;
                 result.unit.name = item.UnitName;
                 result.unit.division = {};
+                result.PRId = item.PRId;
 
                 var resultDiv = div.find(x => x.id == item.UnitId);
                 if (resultDiv) {
@@ -285,7 +290,7 @@ const getPurchaseOrder = function (purchaseRequest) {
                 result.isPosted = item.IsPosted;
                 result.isClosed = item.IsClosed;
 
-                var poItems = await getPOInternalItems(item, currencies, categories);
+                var poItems = allPoItems.filter(x => x.GPOId == item.Id);
                 if (poItems) {
                     result.items = poItems;
                 }
@@ -296,6 +301,7 @@ const getPurchaseOrder = function (purchaseRequest) {
 }
 
 const getPOInternal = function (data) {
+    var dataIds = data.map(x => x.Id);
     return sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -318,13 +324,14 @@ const getPOInternal = function (data) {
         IsClosed,
         Id
         from GarmentInternalPurchaseOrders
-        where prid = :dataId and CreatedBy not in (:creator)`, {
-            replacements: { creator: ['dev', 'unit-test'], dataId: data.Id },
+        where prid in (:dataId) and CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], dataId: dataIds },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
 }
 
-const getPOInternalItems = async function (poInternal, currencies, categories) {
+const getPOInternalItems = async function (poInternals, currencies, categories) {
+    var ids = poInternals.map(x => x.Id);
     var poInternalItems = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -337,11 +344,12 @@ const getPOInternalItems = async function (poInternal, currencies, categories) {
         GPOId,
         Id
         from GarmentInternalPurchaseOrderItems
-        where GPOId = ?`, {
-            replacements: [poInternal.Id],
+        where GPOId in (:ids)`, {
+            replacements: { ids: ids },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
-
+    var allPoExternals = await getPOExternal(poInternalItems);
+    var allFulfillments = await getFulfillments(allPoExternals);
     for (var item of poInternalItems) {
         item.product = {};
         item.product.code = item.ProductCode;
@@ -358,7 +366,7 @@ const getPOInternalItems = async function (poInternal, currencies, categories) {
         item.status.name = item.Status;
         item.id_po = item.GPOId;
 
-        var poExternal = await getPOExternal(item);
+        var poExternal = allPoExternals.find(x => x.POId == item.GPOId);
         if (poExternal) {
             item.purchaseOrderExternal = poExternal;
             item.purchaseOrderExternal._createdDate = poExternal.CreatedUtc;
@@ -382,7 +390,7 @@ const getPOInternalItems = async function (poInternal, currencies, categories) {
             if (currency) {
                 item.currency.symbol = currency.symbol;
             }
-            var fulfillments = await getFulfillments(poExternal);
+            var fulfillments = allFulfillments.filter(x => x.EPOItemId == poExternal.Id);
             if (fulfillments) {
                 item.fulfillments = fulfillments;
             }
@@ -408,7 +416,8 @@ const getPOInternalItems = async function (poInternal, currencies, categories) {
     return poInternalItems;
 };
 
-const getPOExternal = async function (poInternal) {
+const getPOExternal = async function (poInternals) {
+    var gpoIds = poInternals.map(x => x.GPOId);
     var poExternals = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -435,17 +444,19 @@ const getPOExternal = async function (poInternal) {
         e.PaymentDueDays,
         e.IsUseVat,
         e.IsIncomeTax,
-        ei.Id
+        ei.Id,
+        ei.POId
         from GarmentExternalPurchaseOrderItems ei left join GarmentExternalPurchaseOrders e on ei.GarmentEPOId = e.Id        
-        where ei.POId = :poid and ei.CreatedBy not in (:creator)`, {
-            replacements: { creator: ['dev', 'unit-test'], poid: poInternal.GPOId },
+        where ei.POId in (:poid) and ei.CreatedBy not in (:creator)`, {
+            replacements: { creator: ['dev', 'unit-test'], poid: gpoIds },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
-    var poExternal = poExternals[0];
-    return poExternal;
+    // var poExternal = poExternals[0];
+    return poExternals;
 };
 
-const getFulfillments = async function (poExternalItem) {
+const getFulfillments = async function (poExternalItems) {
+    var ids = poExternalItems.map(x => x.Id);
     var fulfillments = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -453,25 +464,27 @@ const getFulfillments = async function (poExternalItem) {
         g.DONo,
         g.DODate,
         gd.Id DetailId,
-        g.Id
+        g.Id,
+        gd.EPOItemId
         from GarmentDeliveryOrderDetails gd left join GarmentDeliveryOrderItems gi on gd.GarmentDOItemId = gi.Id left join GarmentDeliveryOrders g on gi.GarmentDOId = g.Id     
-        where gd.EPOItemId = ?`, {
-            replacements: [poExternalItem.Id],
+        where gd.EPOItemId in (:ids)`, {
+            replacements: { ids: ids },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
-
+    var allUrn = await getURN(fulfillments);
+    var allInternNote = await getInternNote(fulfillments);
     for (var item of fulfillments) {
         item.deliveryOrderNo = item.DONo;
         item.deliveryOrderDate = item.DODate;
         item.deliveryOrderDeliveredQuantity = item.DOQuantity;
-        var urn = await getURN(item);
+        var urn = allUrn.find(x => x.DODetailId == item.DetailId);
         if (urn) {
             item.unitReceiptNoteNo = urn.URNNo;
             item.unitReceiptNoteDate = urn.ReceiptDate;
             item.unitReceiptNoteDeliveredQuantity = urn.OrderQuantity;
             item.unitReceiptNoteDeliveredUomUnit = urn.UomUnit;
         }
-        var internNote = await getInternNote(item);
+        var internNote = allInternNote.find(x => x.DOId == item.Id);
         if (internNote) {
             item.interNoteNo = internNote.INNo;
             item.interNoteDate = internNote.INDate;
@@ -484,24 +497,27 @@ const getFulfillments = async function (poExternalItem) {
     return fulfillments;
 }
 
-const getURN = async function (deliveryOrder) {
+const getURN = async function (deliveryOrders) {
+    var ids = deliveryOrders.map(x => x.DetailId);
     var urns = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select 
         g.URNNo,
         g.ReceiptDate,
         gi.OrderQuantity,
-        gi.UomUnit
+        gi.UomUnit,
+        gi.DODetailId
         from GarmentUnitReceiptNoteItems gi left join GarmentUnitReceiptNotes g on gi.URNId = g.Id
-        where gi.DODetailId = ?`, {
-            replacements: [deliveryOrder.DetailId],
+        where gi.DODetailId in (:ids)`, {
+            replacements: { ids: ids },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
-    var urn = urns[0];
-    return urn;
+    // var urn = urns[0];
+    return urns;
 };
 
-const getInternNote = async function (deliveryOrder) {
+const getInternNote = async function (deliveryOrders) {
+    var ids = deliveryOrders.map(x => x.Id);
     var ins = await sqlPurchasingConnection
         .sqlPURCHASING
         .query(`select
@@ -509,14 +525,15 @@ const getInternNote = async function (deliveryOrder) {
         g.INDate,
         gd.PriceTotal,
         gd.Quantity,
-        gd.PaymentDueDate
+        gd.PaymentDueDate,
+        gd.DOId
         from GarmentInternNoteDetails gd left join GarmentInternNoteItems gi on gd.GarmentItemINId = gi.Id left join GarmentInternNotes g on gi.GarmentINId = g.Id
-        where gd.DOId = ?`, {
-            replacements: [deliveryOrder.Id],
+        where gd.DOId in (:ids)`, {
+            replacements: { ids: ids },
             type: sqlPurchasingConnection.sqlPURCHASING.QueryTypes.SELECT
         });
-    var interNote = ins[0];
-    return interNote;
+    // var interNote = ins[0];
+    return ins;
 };
 
 function getRangeMonth(days) {
@@ -850,7 +867,7 @@ function load(data) {
                     if (item) {
                         var queryString = `\nSELECT ${item.purchaseRequestNo}, ${item.purchaseRequestDate}, ${item.expectedPRDeliveryDate}, ${item.unitCode}, ${item.unitName}, ${item.divisionCode}, ${item.divisionName}, ${item.categoryCode}, ${item.categoryName}, ${item.categoryType}, ${item.productCode}, ${item.productName}, ${item.purchaseRequestDays}, ${item.purchaseRequestDaysRange}, ${item.prPurchaseOrderExternalDays}, ${item.prPurchaseOrderExternalDaysRange}, ${item.deletedPR}, ${item.purchaseOrderNo}, ${item.purchaseOrderDate}, ${item.purchaseOrderExternalDays}, ${item.purchaseOrderExternalDaysRange}, ${item.purchasingStaffName}, ${item.prNoAtPo}, ${item.deletedPO}, ${item.purchaseOrderExternalNo}, ${item.purchaseOrderExternalDate}, ${item.deliveryOrderDays}, ${item.deliveryOrderDaysRange}, ${item.supplierCode}, ${item.supplierName}, ${item.currencyCode}, ${item.currencySymbol}, ${item.paymentMethod}, ${item.currencyRate}, ${item.purchaseQuantity}, ${item.uom}, ${item.pricePerUnit}, ${item.totalPrice}, ${item.expectedDeliveryDate}, ${item.prNoAtPoExt}, ${item.deliveryOrderNo}, ${item.deliveryOrderDate}, ${item.unitReceiptNoteDays}, ${item.unitReceiptNoteDaysRange}, ${item.status}, ${item.prNoAtDo}, ${item.unitReceiptNoteNo}, ${item.unitReceiptNoteDate}, ${item.unitPaymentOrderDays}, ${item.unitPaymentOrderDaysRange},${item.unitPaymentOrderNo}, ${item.unitPaymentOrderDate}, ${item.purchaseOrderDays}, ${item.purchaseOrderDaysRange}, ${item.invoicePrice}, ${item.unitPaymentOrderPrice}, ${item.unitPaymentOrderQuantity}, ${item.unitPaymentOrderDueDate}, ${item.unitReceiptNoteDeliveredQuantity} UNION ALL `;
                         sqlQuery = sqlQuery.concat(queryString);
-                        if (count % 1000 == 0) {
+                        if (count % 200 == 0) {
                             sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                             command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
                             sqlQuery = 'INSERT INTO [DL_Fact_Pembelian_Garment_Temp] ';
