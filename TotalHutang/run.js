@@ -200,16 +200,17 @@ function load(data) {
             .transaction()
             .then(t => {
                 var command = [];
-                var sqlQuery = '';
+                var sqlQuery = 'insert into dl_fact_total_hutang_temp ';
 
                 var count = 1;
                 for (var item of data) {
                     if (item) {
-                        var queryString = `insert into dl_fact_total_hutang_temp([ID Fact Total Hutang], [Nomor Nota Intern], [Tanggal Nota Intern], [Nama Supplier], [Jenis Kategori], [Harga Sesuai Invoice], [Jumlah Sesuai Bon Unit], [Rate Yang Disepakati], [Total Harga Nota Intern], [Nama Kategori], [Nama Divisi], [Nama Unit], [nomor bon unit], [nama produk], [kode produk]) values(${count}, ${item.unitPaymentOrderNo}, ${item.unitPaymentOrderDate}, ${item.supplierName}, ${item.categoryType}, ${item.invoicePrice}, ${item.unitReceiptNoteQuantity}, ${item.purchaseOrderExternalCurrencyRate}, ${item.total}, ${item.categoryName}, ${item.divisionName}, ${item.unitName}, ${item.unitReceiptNoteNo}, ${item.productName}, ${item.productCode});\n`;
+                        var queryString = `\nSELECT ${count}, ${item.unitPaymentOrderNo}, ${item.unitPaymentOrderDate}, ${item.supplierName}, ${item.categoryType}, ${item.invoicePrice}, ${item.unitReceiptNoteQuantity}, ${item.purchaseOrderExternalCurrencyRate}, ${item.total}, ${null}, ${item.categoryName}, ${item.divisionName}, ${item.unitName}, ${item.unitReceiptNoteNo}, ${item.productName}, ${item.productCode} UNION ALL `;
                         sqlQuery = sqlQuery.concat(queryString);
                         if (count % 1000 == 0) {
-                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
-                            sqlQuery = "";
+                            sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
+                            command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));   
+                            sqlQuery = "insert into dl_fact_total_hutang_temp ";
                         }
                         console.log(`add data to query  : ${count}`);
                         count++;
@@ -217,9 +218,11 @@ function load(data) {
                 }
 
 
-                if (sqlQuery != "")
+                if (sqlQuery != ""){
+                    sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                     command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
-
+                }
+                    
                 return Promise.all(command)
                     .then((results) => {
                         sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_TOTAL_HUTANG", {
