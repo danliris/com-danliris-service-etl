@@ -343,16 +343,17 @@ function load(data) {
             .transaction()
             .then(t => {
                 var command = [];
-                var sqlQuery = '';
+                var sqlQuery = 'INSERT INTO [dbo].[DL_Fact_Production_Order_Status_Temp] ';
 
                 var count = 1;
                 for (var item of data) {
                     if (item) {
-                        var queryString = `INSERT INTO [dbo].[DL_Fact_Production_Order_Status_Temp]([salesContractDate], [salesContractNo], [salesContractQuantity], [productionOrderDate], [productionSalesContractNo], [productionOrderNo], [productionOrderQuantity], [kanbanDate], [kanbanSalesContractNo], [kanbanQuantity], [fabricQualityControlDate], [fabricQualityControlQuantity], [orderType], [deleted], [kanbanCode], [dailyOperationQuantity], [dailyOperationSalesContractNo], [dailyOperationCode], [fabricQualityControlCode], [cartNumber], [fabricqualitycontroltestindex], [dailyOperationDate], [salesContractDeliveryDate], [productionOrderDeliveryDate]) VALUES(${item.salesContractDate}, ${item.salesContractNo}, ${item.salesContractQuantity}, ${item.productionOrderDate}, ${item.productionSalesContractNo}, ${item.productionOrderNo}, ${item.productionOrderQuantity}, ${item.kanbanDate}, ${item.kanbanSalesContractNo}, ${item.kanbanQuantity}, ${item.fabricQualityControlDate}, ${item.fabricQualityControlQuantity}, ${item.orderType}, ${item.deleted}, ${item.kanbanCode}, ${item.dailyOperationQuantity}, ${item.dailyOperationSalesContractNo}, ${item.dailyOperationCode}, ${item.fabricQualityControlCode}, ${item.cartNumber}, ${item.fabricqualitycontroltestindex}, ${item.dailyOperationDate}, ${item.salesContractDeliveryDate}, ${item.productionOrderDeliveryDate});\n`;
+                        var queryString = `\nSELECT ${item.salesContractDate}, ${item.salesContractNo}, ${item.salesContractQuantity}, ${item.productionOrderDate}, ${item.productionSalesContractNo}, ${item.productionOrderNo}, ${item.productionOrderQuantity}, ${item.kanbanDate}, ${item.kanbanSalesContractNo}, ${item.kanbanQuantity}, ${item.fabricQualityControlDate}, ${item.fabricQualityControlQuantity}, ${item.orderType}, ${item.deleted}, ${item.kanbanCode}, ${item.dailyOperationQuantity}, ${item.dailyOperationSalesContractNo}, ${item.dailyOperationCode}, ${item.fabricQualityControlCode}, ${item.cartNumber}, ${item.fabricqualitycontroltestindex}, ${item.dailyOperationDate}, ${item.salesContractDeliveryDate}, ${item.productionOrderDeliveryDate} UNION ALL `;
                         sqlQuery = sqlQuery.concat(queryString);
                         if (count % 1000 == 0) {
+                            sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                             command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
-                            sqlQuery = "";
+                            sqlQuery = "INSERT INTO [dbo].[DL_Fact_Production_Order_Status_Temp] ";
                         }
                         console.log(`add data to query  : ${count}`);
                         count++;
@@ -360,8 +361,11 @@ function load(data) {
                 }
 
 
-                if (sqlQuery != "")
+                if (sqlQuery != ""){
+                    sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                     command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
+                }
+                   
 
                 return Promise.all(command)
                     .then((results) => {
