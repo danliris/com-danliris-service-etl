@@ -19,7 +19,8 @@ module.exports = async function () {
                 executionTime: spentTime + " minutes",
                 status: "Successful"
             };
-            return await updateMigrationLog(updateLog);
+            return updateLog;
+            // return await updateMigrationLog(updateLog);
         })
         .catch(async (err) => {
             var finishedDate = new Date();
@@ -68,7 +69,10 @@ const extractFQC = async function (times) {
         .query(`select id, code, pointSystem, dateIm, shiftIm, [group], operatorIm, MachineNoIm, 
         ProductionOrderNo, productionOrderType, kanbanCode, cartNo, Buyer, orderQuantity, 
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols
-        where lastmodifiedutc >= ?`, {
+        where lastmodifiedutc >= ?
+        order by id
+        offset 0 rows
+        fetch next 100 rows only`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
@@ -212,30 +216,17 @@ function load(data) {
                 }
 
                 return Promise.all(command)
-                    .then((results) => {
-                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL", {
-                            transaction: t
-                        }).then((execResult) => {
-                            t.commit()
-                                .then(() => {
-                                    resolve(results);
-                                })
-                                .catch((err) => {
-                                    reject(err);
-                                });
+                    .then((execResult) => {
+                        t.commit()
+                            .then(() => {
+                                resolve(results);
+                            })
+                            .catch((err) => {
+                                reject(err);
+                            });
 
 
-                        }).catch((error) => {
-                            t.rollback()
-                                .then(() => {
-                                    reject(error);
-                                })
-                                .catch((err) => {
-                                    reject(err);
-                                });
-                        });
-                    })
-                    .catch((error) => {
+                    }).catch((error) => {
                         t.rollback()
                             .then(() => {
                                 reject(error);
@@ -244,6 +235,40 @@ function load(data) {
                                 reject(err);
                             });
                     });
+
+                // return Promise.all(command)
+                //     .then((results) => {
+                //         sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL", {
+                //             transaction: t
+                //         }).then((execResult) => {
+                //             t.commit()
+                //                 .then(() => {
+                //                     resolve(results);
+                //                 })
+                //                 .catch((err) => {
+                //                     reject(err);
+                //                 });
+
+
+                //         }).catch((error) => {
+                //             t.rollback()
+                //                 .then(() => {
+                //                     reject(error);
+                //                 })
+                //                 .catch((err) => {
+                //                     reject(err);
+                //                 });
+                //         });
+                //     })
+                //     .catch((error) => {
+                //         t.rollback()
+                //             .then(() => {
+                //                 reject(error);
+                //             })
+                //             .catch((err) => {
+                //                 reject(err);
+                //             });
+                //     });
             })
             .catch((err) => {
                 reject(err);
