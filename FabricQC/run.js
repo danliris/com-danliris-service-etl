@@ -71,7 +71,7 @@ const extractFQC = async function (times) {
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols
         where lastmodifiedutc >= ?
         order by id
-        offset 0 rows
+        offset 50 rows
         fetch next 50 rows only`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
