@@ -2,6 +2,8 @@ let sqlDWHConnections = require('../Connection/DWH/');
 let sqlFPConnection = require('../Connection/FinishingPrinting/')
 const MIGRATION_LOG_DESCRIPTION = "Fabric QC from MongoDB to Azure DWH";
 let moment = require('moment');
+var dataCount = 0;
+
 
 module.exports = async function () {
     var startedDate = new Date();
@@ -17,10 +19,10 @@ module.exports = async function () {
                 start: startedDate,
                 finish: finishedDate,
                 executionTime: spentTime + " minutes",
-                status: "Successful"
+                status: "Successful-Part" + dataCount
             };
-            return updateLog;
-            // return await updateMigrationLog(updateLog);
+            // return updateLog;
+            return await updateMigrationLog(updateLog);
         })
         .catch(async (err) => {
             var finishedDate = new Date();
@@ -71,7 +73,7 @@ const extractFQC = async function (times) {
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols
         where lastmodifiedutc >= ?
         order by id
-        offset 50 rows
+        offset 0 rows
         fetch next 50 rows only`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
@@ -195,6 +197,7 @@ function load(data) {
                 var sqlQuery = 'INSERT INTO [DL_Fact_Fabric_Quality_Control_Temp] ';
 
                 var count = 1;
+                dataCount = data.length;
                 for (var item of data) {
                     if (item) {
                         var queryString = `\nSELECT ${item.qcCode}, ${item.qcpointSystem}, ${item.dateIm}, ${item.shiftIm}, ${item.group}, ${item.operatorIm}, ${item.machineNoIm}, ${item.productionOrderNo}, ${item.productionOrderType}, ${item.kanbanCode}, ${item.cartNo}, ${item.buyer}, ${item.orderQuantity}, ${item.color}, ${item.construction}, ${item.packingInstruction}, ${item.uom}, ${item.type}, ${item.pcsNo}, ${item.grade}, ${item.width}, ${item.initLength}, ${item.avalLength}, ${item.finalLength}, ${item.sampleLength}, ${item.fabricGradeTest}, ${item.finalGradeTest}, ${item.score}, ${item.finalScore}, ${item.pointSystem}, ${item.criteriaCode}, ${item.criteriaGroup}, ${item.criteriaName}, ${item.criteriaA}, ${item.criteriaB}, ${item.criteriaC}, ${item.criteriaD}, ${item.totalScore}, ${item.deleted}, ${item.isUsed}, ${item.pointLimit} UNION ALL `;
@@ -215,52 +218,18 @@ function load(data) {
                     command.push(insertQuery(sqlDWHConnections.sqlDWH, `${sqlQuery}`, t));
                 }
 
-                return Promise.all(command)
-                    .then((execResult) => {
-                        t.commit()
-                            .then(() => {
-                                resolve(execResult);
-                            })
-                            .catch((err) => {
-                                reject(err);
-                            });
-
-
-                    }).catch((error) => {
-                        t.rollback()
-                            .then(() => {
-                                reject(error);
-                            })
-                            .catch((err) => {
-                                reject(err);
-                            });
-                    });
-
                 // return Promise.all(command)
-                //     .then((results) => {
-                //         sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL", {
-                //             transaction: t
-                //         }).then((execResult) => {
-                //             t.commit()
-                //                 .then(() => {
-                //                     resolve(results);
-                //                 })
-                //                 .catch((err) => {
-                //                     reject(err);
-                //                 });
+                //     .then((execResult) => {
+                //         t.commit()
+                //             .then(() => {
+                //                 resolve(execResult);
+                //             })
+                //             .catch((err) => {
+                //                 reject(err);
+                //             });
 
 
-                //         }).catch((error) => {
-                //             t.rollback()
-                //                 .then(() => {
-                //                     reject(error);
-                //                 })
-                //                 .catch((err) => {
-                //                     reject(err);
-                //                 });
-                //         });
-                //     })
-                //     .catch((error) => {
+                //     }).catch((error) => {
                 //         t.rollback()
                 //             .then(() => {
                 //                 reject(error);
@@ -269,6 +238,40 @@ function load(data) {
                 //                 reject(err);
                 //             });
                 //     });
+
+                return Promise.all(command)
+                    .then((results) => {
+                        sqlDWHConnections.sqlDWH.query("exec DL_UPSERT_FACT_FABRIC_QUALITY_CONTROL", {
+                            transaction: t
+                        }).then((execResult) => {
+                            t.commit()
+                                .then(() => {
+                                    resolve(results);
+                                })
+                                .catch((err) => {
+                                    reject(err);
+                                });
+
+
+                        }).catch((error) => {
+                            t.rollback()
+                                .then(() => {
+                                    reject(error);
+                                })
+                                .catch((err) => {
+                                    reject(err);
+                                });
+                        });
+                    })
+                    .catch((error) => {
+                        t.rollback()
+                            .then(() => {
+                                reject(error);
+                            })
+                            .catch((err) => {
+                                reject(err);
+                            });
+                    });
             })
             .catch((err) => {
                 reject(err);
