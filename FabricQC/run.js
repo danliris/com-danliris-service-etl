@@ -74,7 +74,7 @@ const extractFQC = async function (times) {
         where lastmodifiedutc >= ?
         order by id
         offset 50 rows
-        fetch next 50 rows only`, {
+        fetch next 25 rows only`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
