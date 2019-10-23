@@ -79,63 +79,38 @@ const extractFQC = async function (times) {
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
         });
 
-    var fabricGradeTestAll = await joinFGT(fabricQC);
-
     for (var element of fabricQC) {
-        element.fabricGradeTests = fabricGradeTestAll.filter(x => x.FabricQualityControlId == element.id);
+        element.fabricGradeTests = await joinFGT(element);
     }
-    // for (var element of fabricQC) {
-    //     element.fabricGradeTests = await joinFGT(element);
-    // }
 
     return fabricQC;
 };
 
 const joinFGT = async function (data) {
-    if (data.length > 0) {
-        var qcIds = data.map(x => x.id);
-        var fabricGT = await sqlFPConnection
-            .sqlFP
-            .query(`select id, type, pcsNo, grade, width, initLength, avalLength, finalLength, sampleLength, fabricGradeTest, finalGradeTest, score, finalScore, pointSystem, pointLimit,
-            FabricQualityControlId from FabricGradeTests
-            where FabricQualityControlId in (:ids)`, {
-                replacements: { ids: qcIds },
-                type: sqlFPConnection.sqlFP.QueryTypes.SELECT
-            });
 
-        var criterions = await joinCriterion(fabricGT);
-        for (var element of fabricGT) {
-            element.criteria = criterions.filter(x => x.FabricGradeTestId == element.id);
-        }
-        // for (var element of fabricGT) {
-        //     element.criteria = await joinCriterion(element);
-        // }
+    var fabricGT = await sqlFPConnection
+        .sqlFP
+        .query(`select id, type, pcsNo, grade, width, initLength, avalLength, finalLength, sampleLength, fabricGradeTest, finalGradeTest, score, finalScore, pointSystem, pointLimit from FabricGradeTests where FabricQualityControlId = ?`, {
+            replacements: [data.id],
+            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+        });
 
-        return fabricGT;
-    } else {
-        return [];
+    for (var element of fabricGT) {
+        element.criteria = await joinCriterion(element);
     }
 
+    return fabricGT;
 };
 
 const joinCriterion = async function (data) {
+    var criteria = await sqlFPConnection
+        .sqlFP
+        .query(`select id, code, [Group], name, scoreA, scoreB, scoreC, scoreD from criterion where fabricgradetestid = ?`, {
+            replacements: [data.id],
+            type: sqlFPConnection.sqlFP.QueryTypes.SELECT
+        });
 
-    if (data.length > 0) {
-        var gtIds = data.map(x => x.id);
-        var criteria = await sqlFPConnection
-            .sqlFP
-            .query(`select id, code, [Group], name, scoreA, scoreB, scoreC, scoreD,
-            FabricGradeTestId from criterion 
-            where fabricgradetestid in (:ids)`, {
-                replacements: { ids: gtIds },
-                type: sqlFPConnection.sqlFP.QueryTypes.SELECT
-            });
-
-        return criteria;
-    } else {
-        return [];
-    }
-
+    return criteria;
 };
 
 const transform = function (data) {
