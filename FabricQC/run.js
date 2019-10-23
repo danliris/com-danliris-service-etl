@@ -228,7 +228,7 @@ function load(data) {
                         var queryString = `\nSELECT ${item.qcCode}, ${item.qcpointSystem}, ${item.dateIm}, ${item.shiftIm}, ${item.group}, ${item.operatorIm}, ${item.machineNoIm}, ${item.productionOrderNo}, ${item.productionOrderType}, ${item.kanbanCode}, ${item.cartNo}, ${item.buyer}, ${item.orderQuantity}, ${item.color}, ${item.construction}, ${item.packingInstruction}, ${item.uom}, ${item.type}, ${item.pcsNo}, ${item.grade}, ${item.width}, ${item.initLength}, ${item.avalLength}, ${item.finalLength}, ${item.sampleLength}, ${item.fabricGradeTest}, ${item.finalGradeTest}, ${item.score}, ${item.finalScore}, ${item.pointSystem}, ${item.criteriaCode}, ${item.criteriaGroup}, ${item.criteriaName}, ${item.criteriaA}, ${item.criteriaB}, ${item.criteriaC}, ${item.criteriaD}, ${item.totalScore}, ${item.deleted}, ${item.isUsed}, ${item.pointLimit} UNION ALL `;
                         sqlQuery = sqlQuery.concat(queryString);
 
-                        if (count % 3000 === 0) {
+                        if (count % 2000 === 0) {
                             sqlQuery = sqlQuery.substring(0, sqlQuery.length - 10);
                             command.push(insertQuery(sqlDWHConnections.sqlDWH, sqlQuery, t));
                             sqlQuery = "INSERT INTO [DL_Fact_Fabric_Quality_Control_Temp] ";
