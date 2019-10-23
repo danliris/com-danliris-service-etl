@@ -19,7 +19,7 @@ module.exports = async function () {
                 start: startedDate,
                 finish: finishedDate,
                 executionTime: spentTime + " minutes",
-                status: "Successful-30-Part15-" + dataCount
+                status: "Successful-30-Part16-" + dataCount
             };
             // return updateLog;
             return await updateMigrationLog(updateLog);
@@ -73,7 +73,7 @@ const extractFQC = async function (times) {
         color, construction, packingInstruction, uom, IsDeleted, IsUsed from fabricqualitycontrols
         where lastmodifiedutc >= ?
         order by id
-        offset 390 rows
+        offset 420 rows
         fetch next 30 rows only`, {
             replacements: [timestamp],
             type: sqlFPConnection.sqlFP.QueryTypes.SELECT
