@@ -6,7 +6,7 @@
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
-    "moment": "^2.24.0",
+    "moment": "^2.29.4",
     "mongodb": "^3.3.2",
     "mssql": "^5.1.0",
     "sequelize": "^5.18.0",
